@@ -147,7 +147,7 @@ function setTT(st){
   el.textContent = st.status==='connected' ? `TikTok: @${st.uniqueId} ✓` : st.status==='connecting' ? `TikTok: đang kết nối @${st.uniqueId}…` : st.status==='error' ? 'TikTok: lỗi kết nối' : 'TikTok: chưa kết nối';
 }
 function connect(){
-  ws = new WebSocket(`ws://${location.host}/ws?role=control`);
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?role=control`);
   ws.onopen = () => { $('srv').textContent='Server: đang chạy'; $('srv').className='chip ok'; };
   ws.onclose = () => { $('srv').textContent='Server: mất kết nối'; $('srv').className='chip bad'; setTimeout(connect, 2000); };
   ws.onmessage = e => {
@@ -167,7 +167,7 @@ connect();
 $('btnConnect').onclick = () => send('connect', { uniqueId: $('uid').value });
 $('uid').onkeydown = e => { if (e.key==='Enter') send('connect', { uniqueId: $('uid').value }); };
 $('btnDisconnect').onclick = () => send('disconnect');
-$('btnOverlay').onclick = () => window.open('/live/overlay.html', 'overlay916', 'width=540,height=960');
+$('btnOverlay').onclick = () => window.open('/overlay.html', 'overlay916', 'width=540,height=960');
 $('btnChat').onclick = () => send('chat', { name: $('simName').value, text: $('simText').value });
 document.querySelectorAll('[data-gift]').forEach(b => b.onclick = () => send('gift', { name: $('simName').value, gift: b.dataset.gift, diamonds: +b.dataset.dia, count: 1 }));
 document.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => send('fill', { n: +b.dataset.fill }));

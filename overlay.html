@@ -218,7 +218,7 @@ function hearts(v,n){ for (let i=0;i<Math.min(6,n);i++) petals.push({x:v.x+(Math
 /* ======================= server link ======================= */
 let ws=null;
 function connect(){
-  ws = new WebSocket(`ws://${location.host}/ws?role=overlay`);
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?role=overlay`);
   const st=document.getElementById('conn');
   ws.onopen=()=>{ st.textContent=''; };
   ws.onclose=()=>{ st.textContent='mất kết nối server… đang thử lại'; setTimeout(connect,2000); };
