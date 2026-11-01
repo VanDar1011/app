@@ -13,7 +13,7 @@ import { WebSocketServer } from 'ws';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');            // repo root: serves /assets, /live
+const ROOT = __dirname; // All HTML files and assets are located beside server.mjs
 const TTS_DIR = path.join(__dirname, 'tts');
 fs.mkdirSync(TTS_DIR, { recursive: true });
 for (const f of fs.readdirSync(TTS_DIR)) { try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
@@ -347,7 +347,7 @@ const PUBLIC_HOSTS = String(process.env.PUBLIC_HOSTS || '')
   .map(s => s.trim().toLowerCase())
   .filter(Boolean);
 const MIME = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.css':'text/css', '.json':'application/json',
-  '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp', '.mp3':'audio/mpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon' };
+  '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.wav':'audio/wav', '.ogg':'audio/ogg', '.woff':'font/woff', '.woff2':'font/woff2', '.webp':'image/webp', '.mp3':'audio/mpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon' };
 const ALLOWED_HOSTS = new Set([
   `localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`,
   'localhost', '127.0.0.1', '[::1]',
@@ -364,21 +364,40 @@ const okHost = h => {
 };
 const SEP = path.sep;
 function resolveStatic(urlPath){
-  let p = urlPath === '/' ? '/live/index.html' : urlPath;
-  if (p === '/index.html') return path.join(__dirname, 'index.html');
-  if (!/^\/(assets|live)\//.test(p)) return null;
-  if (p.split('/').some(seg => seg.startsWith('.') || seg === 'node_modules')) return null;
-  if (/\.(mjs|json|md|log)$/i.test(p) && !p.startsWith('/assets/')) return null;      // never serve server code / package files
-  let file;
-  if (p.startsWith('/assets/')) {
-    // Live bundle keeps assets in live/assets; map URL /assets/* to that folder.
-    file = path.normalize(path.join(__dirname, 'assets', p.slice('/assets/'.length)));
-    if (!file.startsWith(path.join(__dirname, 'assets') + SEP)) return null;
-  } else {
-    file = path.normalize(path.join(ROOT, p));
-    if (!file.startsWith(ROOT + SEP)) return null;
-  }
-  return file;
+  // Serve all three HTML entry points from the project root.
+  // Keep legacy /live/*.html URLs working for old bookmarks.
+  const entryPoints = new Map([
+    ['/', 'index.html'],
+    ['/index.html', 'index.html'],
+    ['/overlay.html', 'overlay.html'],
+    ['/control.html', 'control.html'],
+    ['/live/', 'index.html'],
+    ['/live/index.html', 'index.html'],
+    ['/live/overlay.html', 'overlay.html'],
+    ['/live/control.html', 'control.html'],
+  ]);
+  if (entryPoints.has(urlPath)) return path.join(ROOT, entryPoints.get(urlPath));
+
+  // The browser requests /assets/* and /tts/* using absolute paths.
+  let rel;
+  if (urlPath.startsWith('/assets/')) rel = urlPath.slice(1);
+  else if (urlPath.startsWith('/tts/')) rel = urlPath.slice(1);
+  else if (urlPath.startsWith('/live/tts/')) rel = urlPath.slice('/live/'.length);
+  else return null;
+
+  // Prevent traversal, hidden files, source/config exposure and unsafe paths.
+  const segments = rel.split('/');
+  if (segments.some(seg => !seg || seg === '.' || seg === '..' || seg.startsWith('.') || seg === 'node_modules' || seg.includes('\\') || seg.includes(':'))) return null;
+  const base = segments[0];
+  const filename = segments.at(-1);
+  const ext = path.extname(filename).toLowerCase();
+  const allowed = base === 'assets'
+    ? new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.mp3', '.wav', '.ogg', '.css', '.js', '.woff', '.woff2'])
+    : new Set(['.mp3']);
+  if (!allowed.has(ext)) return null;
+  const rootDir = path.join(ROOT, base);
+  const file = path.resolve(ROOT, ...segments);
+  return file.startsWith(rootDir + SEP) ? file : null;
 }
 const server = http.createServer((req, res) => {
   if (!okHost(req.headers.host)) { res.writeHead(421).end('wrong host'); return; }
@@ -389,7 +408,7 @@ const server = http.createServer((req, res) => {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': p.startsWith('/live/tts/') ? 'no-store' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
+      'Cache-Control': (p.startsWith('/tts/') || p.startsWith('/live/tts/')) ? 'no-store' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
     if (req.method === 'HEAD') { res.end(); return; }
     fs.createReadStream(file).pipe(res);
   });
@@ -445,6 +464,6 @@ wss.on('connection', (ws, req) => {
 });
 server.listen(PORT, HOST, () => {
   const mode = ALLOW_REMOTE ? 'LAN' : 'LOCAL';
-  addLog(`Server (${mode}) chạy tại http://localhost:${PORT}  ·  Client: http://localhost:${PORT}/  ·  Bảng điều khiển: http://localhost:${PORT}/live/control.html  ·  Overlay: http://localhost:${PORT}/live/overlay.html`);
+  addLog(`Server (${mode}) chạy tại http://localhost:${PORT}  ·  Client: http://localhost:${PORT}/  ·  Bảng điều khiển: http://localhost:${PORT}/control.html  ·  Overlay: http://localhost:${PORT}/overlay.html`);
   if (ALLOW_REMOTE) addLog('Đang mở kết nối LAN: máy khác dùng http://IP_MAY_CHAY_SERVER:' + PORT + '/ để vào cùng phiên.');
 });
