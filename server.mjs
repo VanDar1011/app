@@ -369,8 +369,15 @@ function resolveStatic(urlPath){
   if (!/^\/(assets|live)\//.test(p)) return null;
   if (p.split('/').some(seg => seg.startsWith('.') || seg === 'node_modules')) return null;
   if (/\.(mjs|json|md|log)$/i.test(p) && !p.startsWith('/assets/')) return null;      // never serve server code / package files
-  const file = path.normalize(path.join(ROOT, p));
-  if (!file.startsWith(ROOT + SEP)) return null;
+  let file;
+  if (p.startsWith('/assets/')) {
+    // Live bundle keeps assets in live/assets; map URL /assets/* to that folder.
+    file = path.normalize(path.join(__dirname, 'assets', p.slice('/assets/'.length)));
+    if (!file.startsWith(path.join(__dirname, 'assets') + SEP)) return null;
+  } else {
+    file = path.normalize(path.join(ROOT, p));
+    if (!file.startsWith(ROOT + SEP)) return null;
+  }
   return file;
 }
 const server = http.createServer((req, res) => {
